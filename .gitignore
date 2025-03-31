@@ -1,0 +1,6 @@
+__pycache__
+.idea
+.venv
+.envrc
+.DS_Store
+.ruff_cache
