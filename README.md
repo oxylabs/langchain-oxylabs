@@ -3,6 +3,8 @@
 This package contains the LangChain integration with Oxylabs, providing tools to scrape Google search results 
 with Oxylabs Web Scraper API using LangChain's framework.
 
+[![](https://dcbadge.vercel.app/api/server/eWsVUJrnG5)](https://discord.gg/Pds3gBmKMH)
+
 ## Installation
 
 ```bash
