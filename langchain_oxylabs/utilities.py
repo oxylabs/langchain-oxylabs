@@ -2,11 +2,13 @@
 
 import asyncio
 from dataclasses import dataclass
+from platform import architecture, python_version
 from typing import Any, Dict, List, Optional
-from platform import python_version, architecture
-from oxylabs import RealtimeClient  # type: ignore[import-untyped]
+
 from langchain_core.utils import get_from_dict_or_env
+from oxylabs import RealtimeClient  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from langchain_oxylabs._version import __version__
 
 RESULT_CATEGORIES = [
@@ -28,6 +30,11 @@ class ResponseElement:
     path_: str
     python_type: str
     parent: Optional["ResponseElement"]
+
+
+def get_sdk_type() -> str:
+    bits, _ = architecture()
+    return f"oxylabs-sdk-langchain/{__version__} ({python_version()}; {bits})"
 
 
 def _get_default_excluded_result_attributes() -> List[str]:
@@ -182,12 +189,9 @@ class OxylabsSearchAPIWrapper(BaseModel):
             "oxylabs_username": oxylabs_username,
             "oxylabs_password": oxylabs_password,
             "params": dict(current_params),
-            "include_binary_image_data": values.get(
-                "include_binary_image_data", False
-            ),
-            "parsing_recursion_depth": values.get(
-                "parsing_recursion_depth", 5
-            )}
+            "include_binary_image_data": values.get("include_binary_image_data", False),
+            "parsing_recursion_depth": values.get("parsing_recursion_depth", 5),
+        }
 
         if "result_categories" in formed_values["params"]:
             validated_categories = cls.validate_response_categories(
@@ -197,11 +201,10 @@ class OxylabsSearchAPIWrapper(BaseModel):
                 formed_values["result_categories"] = validated_categories
 
         try:
-            bits, _ = architecture()
             oxylabs_realtime_client = RealtimeClient(
                 username=oxylabs_username,
                 password=oxylabs_password,
-                sdk_type=f"oxylabs-sdk-langchain/{__version__} ({python_version()}; {bits})",
+                sdk_type=get_sdk_type(),
             )
             # The process to set any available provider
             source_ = formed_values["params"]["source"]
@@ -231,7 +234,9 @@ class OxylabsSearchAPIWrapper(BaseModel):
             raise NotImplementedError(f"{exc}") from exc
 
         except Exception as exc:
-            raise RuntimeError(f"Unknown Oxylabs Python SDK integration error: {exc}") from exc
+            raise RuntimeError(
+                f"Unknown Oxylabs Python SDK integration error: {exc}"
+            ) from exc
 
         return formed_values
 

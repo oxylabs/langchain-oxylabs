@@ -1,10 +1,19 @@
 """Integration test for OxylabsSearchRun and OxylabsSearchResults."""
+
 from typing import Type
-from langchain_oxylabs import OxylabsSearchResults, OxylabsSearchRun, OxylabsSearchAPIWrapper
+
 from langchain_tests.integration_tests import ToolsIntegrationTests
+
+from langchain_oxylabs import (
+    OxylabsSearchAPIWrapper,
+    OxylabsSearchResults,
+    OxylabsSearchRun,
+)
+
 
 class TestOxylabsSearchRunIntegration(ToolsIntegrationTests):
     """Test OxylabsSearchRun tool with LangChain's integration tests."""
+
     @property
     def tool_constructor(self) -> Type[OxylabsSearchRun]:
         return OxylabsSearchRun
@@ -20,8 +29,10 @@ class TestOxylabsSearchRunIntegration(ToolsIntegrationTests):
             "geo_location": "United Kingdom",
         }
 
+
 class TestOxylabsSearchResultsIntegration(ToolsIntegrationTests):
     """Test OxylabsSearchResults tool with LangChain's integration tests."""
+
     @property
     def tool_constructor(self) -> Type[OxylabsSearchResults]:
         return OxylabsSearchResults
@@ -55,6 +66,7 @@ def test_oxylabs_search_call() -> None:
     assert "Guido van Rossum" in output
     assert isinstance(output, str)
 
+
 def test_oxylabs_search_results_call() -> None:
     """Test a simple results call to Oxylabs Search API."""
     oxylabs_search_tool = OxylabsSearchResults(wrapper=OxylabsSearchAPIWrapper())
@@ -71,4 +83,3 @@ def test_oxylabs_search_results_call() -> None:
     assert ".py" in output
     assert "Guido van Rossum" in output
     assert isinstance(output, str)
-

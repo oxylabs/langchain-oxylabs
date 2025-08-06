@@ -2,13 +2,15 @@
 
 import json
 from typing import Optional, Type
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel, ConfigDict, Field
-from langchain_oxylabs.utilities import OxylabsSearchAPIWrapper
+
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
+from langchain_core.tools import BaseTool
+from pydantic import BaseModel, ConfigDict, Field
+
+from langchain_oxylabs.utilities import OxylabsSearchAPIWrapper
 
 
 class OxylabsSearchQueryInput(BaseModel):
@@ -140,7 +142,7 @@ class OxylabsSearchRun(BaseTool):  # type: ignore[override, override]
         query: str,
         geo_location: Optional[str] = "",
         # run_manager is added to enable tracing
-        run_manager: Optional[CallbackManagerForToolRun] = None
+        run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
 
@@ -158,7 +160,7 @@ class OxylabsSearchRun(BaseTool):  # type: ignore[override, override]
         query: str,
         geo_location: Optional[str] = "",
         # run_manager is added to enable tracing
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool asynchronously."""
 
@@ -291,7 +293,7 @@ class OxylabsSearchResults(BaseTool):  # type: ignore[override, override]
         query: str,
         geo_location: Optional[str] = "",
         # run_manager is added to enable tracing
-        run_manager: Optional[CallbackManagerForToolRun] = None
+        run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
 
@@ -309,7 +311,7 @@ class OxylabsSearchResults(BaseTool):  # type: ignore[override, override]
         query: str,
         geo_location: Optional[str] = "",
         # run_manager is added to enable tracing
-        run_manager: Optional[AsyncCallbackManagerForToolRun] = None
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool asynchronously."""
 
