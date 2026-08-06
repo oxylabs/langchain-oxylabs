@@ -301,6 +301,11 @@ class OxylabsSearchAPIWrapper(BaseModel):
     def get_params(self, **kwargs: Any) -> Dict[str, Any]:
         """
         Get default configuration parameters for OxylabsSearchAPI for scrape_search().
+
+        Empty configured values are omitted so the Oxylabs API applies its own
+        defaults. Per-call overrides in `kwargs` are always applied, even for keys
+        that were omitted, so that values supplied at invocation time (such as an
+        LLM-provided `geo_location`) are never silently discarded.
         """
         wrapper_params_ = ["result_categories"]
 
@@ -311,7 +316,9 @@ class OxylabsSearchAPIWrapper(BaseModel):
         }
 
         for key, value in kwargs.items():
-            if key in _params:
+            if key in wrapper_params_:
+                continue
+            if value:
                 _params[key] = value
 
         return _params

@@ -18,13 +18,14 @@ class OxylabsSearchQueryInput(BaseModel):
 
     query: str = Field(description="query to retrieve on Oxylabs Search API")
     geo_location: Optional[str] = Field(
-        default="California,United States",
+        default=None,
         description="Geographic location for the search;"
-        " adjust if location-specific information is requested.",
+        " set this if location-specific information is requested."
+        " Examples: `Vilnius,Lithuania`, `California,United States`, `DE`.",
     )
 
 
-class OxylabsSearchRun(BaseTool):  # type: ignore[override, override]
+class OxylabsSearchRun(BaseTool):
     """Oxylabs Search Run tool.
 
     Setup:
@@ -140,41 +141,35 @@ class OxylabsSearchRun(BaseTool):  # type: ignore[override, override]
     def _run(
         self,
         query: str,
-        geo_location: Optional[str] = "",
+        geo_location: Optional[str] = None,
         # run_manager is added to enable tracing
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
 
         kwargs_ = {**self.kwargs}
-        kwargs_.update(
-            {
-                "geo_location": geo_location,
-            }
-        )
+        if geo_location:
+            kwargs_["geo_location"] = geo_location
 
         return self.wrapper.run(query, **kwargs_)
 
     async def _arun(
         self,
         query: str,
-        geo_location: Optional[str] = "",
+        geo_location: Optional[str] = None,
         # run_manager is added to enable tracing
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool asynchronously."""
 
         kwargs_ = {**self.kwargs}
-        kwargs_.update(
-            {
-                "geo_location": geo_location,
-            }
-        )
+        if geo_location:
+            kwargs_["geo_location"] = geo_location
 
         return await self.wrapper.arun(query, **kwargs_)
 
 
-class OxylabsSearchResults(BaseTool):  # type: ignore[override, override]
+class OxylabsSearchResults(BaseTool):
     """Oxylabs Search Results tool.
 
     Setup:
@@ -291,35 +286,29 @@ class OxylabsSearchResults(BaseTool):  # type: ignore[override, override]
     def _run(
         self,
         query: str,
-        geo_location: Optional[str] = "",
+        geo_location: Optional[str] = None,
         # run_manager is added to enable tracing
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
 
         kwargs_ = {**self.kwargs}
-        kwargs_.update(
-            {
-                "geo_location": geo_location,
-            }
-        )
+        if geo_location:
+            kwargs_["geo_location"] = geo_location
 
         return json.dumps(self.wrapper.results(query, **kwargs_))
 
     async def _arun(
         self,
         query: str,
-        geo_location: Optional[str] = "",
+        geo_location: Optional[str] = None,
         # run_manager is added to enable tracing
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool asynchronously."""
 
         kwargs_ = {**self.kwargs}
-        kwargs_.update(
-            {
-                "geo_location": geo_location,
-            }
-        )
+        if geo_location:
+            kwargs_["geo_location"] = geo_location
 
         return json.dumps(await self.wrapper.aresults(query, **kwargs_))
