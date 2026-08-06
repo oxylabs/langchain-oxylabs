@@ -4,3 +4,4 @@ __pycache__
 .envrc
 .DS_Store
 .ruff_cache
+.env

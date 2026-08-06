@@ -13,17 +13,17 @@ class OxylabsLoader(BaseLoader):
     Oxylabs document loader integration.
 
     Setup:
-        Install ``oxylabs``, ``langchain_community`` and set ``OXYLABS_USERNAME``, ``OXYLABS_PASSWORD`` environment variables.
+        Install ``langchain-oxylabs`` and set ``OXYLABS_USERNAME``, ``OXYLABS_PASSWORD`` environment variables.
 
         .. code-block:: bash
 
-            pip install -U oxylabs langchain_community
+            pip install -U langchain-oxylabs
             export OXYLABS_USERNAME=OXYLABS_USERNAME
             export OXYLABS_PASSWORD=OXYLABS_PASSWORD
 
     Usage example:
         .. code-block:: python
-            from langchain_community.document_loaders import OxylabsLoader
+            from langchain_oxylabs import OxylabsLoader
 
             loader = OxylabsLoader(
                 urls=[
@@ -33,7 +33,7 @@ class OxylabsLoader(BaseLoader):
                 params={"markdown": True},
             )
 
-            documents = loader.lazy_load()
+            documents = loader.load()
 
             print(documents[0].page_content[:250])
 
