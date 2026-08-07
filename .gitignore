@@ -5,3 +5,12 @@ __pycache__
 .DS_Store
 .ruff_cache
 .env
+
+# Build artifacts produced by `poetry build`
+dist/
+build/
+*.egg-info/
+
+# Test and type-check caches
+.pytest_cache/
+.mypy_cache/

@@ -51,8 +51,10 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 
 [tool.poetry.group.test.dependencies]
-pytest = "^8.3"
-pytest-asyncio = "^0.24"
+# Upper bounds track what langchain-tests allows, so security updates to the
+# test toolchain are not blocked by our own pins.
+pytest = ">=8.3,<10.0"
+pytest-asyncio = ">=1.4,<2.0"
 pytest-socket = "^0.7.0"
 pytest-watcher = "^0.3.4"
 langchain-tests = "^1.1"
