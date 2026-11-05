@@ -570,7 +570,9 @@ class OxylabsWebScrape(BaseTool):
         if not results:
             raise ToolException(f"The scrape returned no results: {response}")
 
-        if "json" in results[0]:
+        # Decided by what was asked for, not by which keys the result carries:
+        # a page scrape can still come back with an empty `json` key.
+        if output == "json":
             parsed = [r.get("json") for r in results]
             return json.dumps(parsed[0] if len(parsed) == 1 else parsed)
 
@@ -608,7 +610,7 @@ class OxylabsWebScrape(BaseTool):
             )
         except OxylabsWebAPIError as exc:
             raise ToolException(str(exc)) from exc
-        return self._format(response, output, run_js)
+        return self._format(response, "json" if json_prompt else output, run_js)
 
     async def _arun(
         self,
@@ -628,4 +630,4 @@ class OxylabsWebScrape(BaseTool):
             )
         except OxylabsWebAPIError as exc:
             raise ToolException(str(exc)) from exc
-        return self._format(response, output, run_js)
+        return self._format(response, "json" if json_prompt else output, run_js)

@@ -6,6 +6,7 @@ from typing import Any, Dict
 import httpx
 import pytest
 from langchain_core.messages import ToolMessage
+from pydantic import SecretStr
 
 from langchain_oxylabs import (
     OxylabsWebAPIError,
@@ -63,6 +64,30 @@ class TestWrapper:
         monkeypatch.delenv("OXYLABS_WEB_API_KEY")
         with pytest.raises(ValueError, match="OXYLABS_WEB_API_KEY"):
             OxylabsWebAPIWrapper()
+
+    def test_surrounding_whitespace_is_stripped(self, web_api: FakeWebAPI) -> None:
+        web_api.reply(200, search_body())
+        OxylabsWebAPIWrapper(oxylabs_web_api_key=SecretStr("  key-from-file\n")).search(
+            "q"
+        )
+        assert web_api.requests[-1].headers["authorization"] == "Bearer key-from-file"
+
+    def test_env_key_is_stripped_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OXYLABS_WEB_API_KEY", "env-key\n")
+        key = OxylabsWebAPIWrapper().oxylabs_web_api_key.get_secret_value()
+        assert key == "env-key"
+
+    def test_whitespace_inside_the_key_is_rejected_without_quoting_it(self) -> None:
+        with pytest.raises(ValueError, match="whitespace") as error:
+            OxylabsWebAPIWrapper(oxylabs_web_api_key=SecretStr("secret\nkey"))
+        assert "secret" not in str(error.value)
+
+    def test_rejected_header_never_echoes_the_key(self, web_api: FakeWebAPI) -> None:
+        web_api.reply(0, httpx.LocalProtocolError("Illegal header value b'Bearer k'"))
+        with pytest.raises(OxylabsWebAPIError, match="headers were rejected") as error:
+            OxylabsWebAPIWrapper().search("q")
+        assert "Bearer" not in str(error.value)
+        assert len(web_api.requests) == 1
 
     def test_key_is_not_in_repr(self) -> None:
         assert "test-web-api-key" not in repr(OxylabsWebAPIWrapper())
@@ -284,6 +309,13 @@ class TestOxylabsWebScrape:
             {"url": "https://example.com", "json_prompt": "the price"}
         )
         assert json.loads(out) == {"price": "91,99 €"}
+
+    def test_null_json_key_does_not_hide_the_page(self, web_api: FakeWebAPI) -> None:
+        body = scrape_body()
+        body["results"][0]["json"] = None
+        web_api.reply(200, body)
+        out = OxylabsWebScrape().invoke({"url": "https://example.com"})
+        assert out.startswith("# Page")
 
     def test_long_pages_are_truncated(self, web_api: FakeWebAPI) -> None:
         web_api.reply(200, scrape_body(value="a" * 1000))

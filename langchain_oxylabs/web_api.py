@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 from langchain_core.utils import secret_from_env
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from langchain_oxylabs.utilities import get_sdk_type
 
@@ -99,6 +99,12 @@ def _check(resp: httpx.Response, path: str) -> Dict[str, Any]:
     return body
 
 
+_REJECTED_HEADERS = (
+    "The request headers were rejected before sending: check that the Oxylabs"
+    " Web API key holds only the key."
+)
+
+
 def _request_id(body: Dict[str, Any]) -> str:
     request_id = (body.get("metadata") or {}).get("request_id")
     if not request_id:
@@ -130,13 +136,14 @@ class OxylabsWebAPIWrapper(BaseModel):
     """
 
     oxylabs_web_api_key: SecretStr = Field(
+        validate_default=True,
         default_factory=secret_from_env(
             "OXYLABS_WEB_API_KEY",
             error_message=(
                 "Oxylabs Web API key is missing. Set the `OXYLABS_WEB_API_KEY`"
                 " environment variable or pass `oxylabs_web_api_key`."
             ),
-        )
+        ),
     )
     base_url: str = DEFAULT_BASE_URL
     request_timeout: float = Field(
@@ -153,7 +160,21 @@ class OxylabsWebAPIWrapper(BaseModel):
         description="Seconds to wait for a queued scrape before giving up.",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    # Validation errors would otherwise quote the rejected input: the API key.
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    @field_validator("oxylabs_web_api_key")
+    @classmethod
+    def _clean_key(cls, key: SecretStr) -> SecretStr:
+        # A key pasted or read from a file often carries a trailing newline, and
+        # httpx refuses such a header with an error that quotes the whole key.
+        value = key.get_secret_value().strip()
+        if any(char.isspace() for char in value):
+            raise ValueError(
+                "The Oxylabs Web API key contains whitespace or a line break;"
+                " pass the key on its own."
+            )
+        return SecretStr(value)
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -182,6 +203,10 @@ class OxylabsWebAPIWrapper(BaseModel):
                     )
             except httpx.TimeoutException as exc:
                 raise OxylabsWebAPIError(f"Request to {path} timed out.") from exc
+            except httpx.LocalProtocolError:
+                # Never echo this one: httpx quotes the rejected header, which
+                # carries the API key.
+                raise OxylabsWebAPIError(_REJECTED_HEADERS) from None
             except httpx.HTTPError as exc:
                 last_error = OxylabsWebAPIError(
                     f"Could not reach the Oxylabs Web API at {self._url(path)}: {exc}"
@@ -206,6 +231,10 @@ class OxylabsWebAPIWrapper(BaseModel):
                     )
             except httpx.TimeoutException as exc:
                 raise OxylabsWebAPIError(f"Request to {path} timed out.") from exc
+            except httpx.LocalProtocolError:
+                # Never echo this one: httpx quotes the rejected header, which
+                # carries the API key.
+                raise OxylabsWebAPIError(_REJECTED_HEADERS) from None
             except httpx.HTTPError as exc:
                 last_error = OxylabsWebAPIError(
                     f"Could not reach the Oxylabs Web API at {self._url(path)}: {exc}"
