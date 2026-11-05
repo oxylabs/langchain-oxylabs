@@ -1,11 +1,17 @@
 import json
 import os
-from typing import Any, Iterator, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, Optional
 
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
 from langchain_oxylabs.utilities import get_sdk_type
+from langchain_oxylabs.web_api import (
+    Device,
+    OxylabsWebAPIWrapper,
+    ScrapeFormat,
+    scrape_results,
+)
 
 
 class OxylabsLoader(BaseLoader):
@@ -164,3 +170,112 @@ class OxylabsLoader(BaseLoader):
             metadata = self._get_metadata_from_response(response)
 
             yield Document(page_content=content, metadata=metadata)
+
+
+class OxylabsWebLoader(BaseLoader):
+    """
+    Loads web pages through the Oxylabs Web API, one Document per URL.
+
+    Setup:
+        Install ``langchain-oxylabs`` and set ``OXYLABS_WEB_API_KEY`` to the key of
+        a Web API instance from the Oxylabs dashboard.
+
+        .. code-block:: bash
+
+            pip install -U langchain-oxylabs
+            export OXYLABS_WEB_API_KEY="your-web-api-key"
+
+    Usage example:
+        .. code-block:: python
+            from langchain_oxylabs import OxylabsWebLoader
+
+            loader = OxylabsWebLoader(
+                urls=[
+                    "https://sandbox.oxylabs.io/products/1",
+                    "https://sandbox.oxylabs.io/products/2",
+                ],
+                location="DE",
+            )
+
+            documents = loader.load()
+
+            print(documents[0].metadata["source"])
+            # https://sandbox.oxylabs.io/products/1
+    """
+
+    def __init__(
+        self,
+        urls: list[str],
+        output: ScrapeFormat = "markdown",
+        location: Optional[str] = None,
+        device: Optional[Device] = None,
+        run_js: bool = False,
+        *,
+        wrapper: Optional[OxylabsWebAPIWrapper] = None,
+        oxylabs_web_api_key: Optional[str] = None,
+    ):
+        """Oxylabs Web API document loader.
+
+        Args:
+            urls: Absolute http(s) URLs to load.
+            output: "markdown" (default) or "html".
+            location: Two-letter country code to fetch the pages from.
+            device: "desktop" (the API's default) or "mobile".
+            run_js: Render the pages' JavaScript.
+            wrapper: A configured OxylabsWebAPIWrapper, e.g. with a longer
+                `max_wait`. Takes precedence over `oxylabs_web_api_key`.
+            oxylabs_web_api_key: Web API key. Defaults to `OXYLABS_WEB_API_KEY`.
+        """
+        if not urls:
+            raise ValueError("`urls` must contain at least one URL.")
+
+        if wrapper is None:
+            kwargs: Dict[str, Any] = {}
+            if oxylabs_web_api_key:
+                kwargs["oxylabs_web_api_key"] = oxylabs_web_api_key
+            wrapper = OxylabsWebAPIWrapper(**kwargs)
+
+        self._wrapper = wrapper
+        self._urls = urls
+        self._output: ScrapeFormat = output
+        self._location = location
+        self._device: Optional[Device] = device
+        self._run_js = run_js
+
+    def _to_document(self, url: str, response: Dict[str, Any]) -> Document:
+        results = scrape_results(response)
+        content = "\n\n".join(str(r.get(self._output) or "") for r in results)
+
+        metadata: Dict[str, Any] = {"source": url}
+        result_meta = results[0].get("metadata") if results else None
+        if isinstance(result_meta, dict):
+            if result_meta.get("url"):
+                metadata["final_url"] = result_meta["url"]
+            http = (result_meta.get("statuses") or {}).get("http_request") or {}
+            if http.get("code"):
+                metadata["status_code"] = http["code"]
+        request_id = (response.get("metadata") or {}).get("request_id")
+        if request_id:
+            metadata["request_id"] = request_id
+
+        return Document(page_content=content, metadata=metadata)
+
+    def lazy_load(self) -> Iterator[Document]:
+        """
+        Load the URLs into Documents, one request at a time.
+        """
+        for url in self._urls:
+            response = self._wrapper.scrape(
+                url, self._output, self._location, self._device, self._run_js
+            )
+            yield self._to_document(url, response)
+
+    async def alazy_load(self) -> AsyncIterator[Document]:
+        """
+        Load the URLs into Documents asynchronously, one request at a time.
+        """
+        for url in self._urls:
+            response = await self._wrapper.ascrape(
+                url, self._output, self._location, self._device, self._run_js
+            )
+            yield self._to_document(url, response)

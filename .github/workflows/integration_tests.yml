@@ -44,4 +44,5 @@ jobs:
         env:
           OXYLABS_USERNAME: ${{ secrets.OXYLABS_USERNAME }}
           OXYLABS_PASSWORD: ${{ secrets.OXYLABS_PASSWORD }}
+          OXYLABS_WEB_API_KEY: ${{ secrets.OXYLABS_WEB_API_KEY }}
         run: poetry run pytest tests/integration_tests/ -v --durations=10
