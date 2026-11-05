@@ -6,6 +6,7 @@ EXPECTED_ALL = [
     "OxylabsSearchRun",
     "OxylabsSearchResults",
     "OxylabsSearchAPIWrapper",
+    "OxylabsAPIError",
     "OxylabsLoader",
     "OxylabsWebSearch",
     "OxylabsWebScrape",

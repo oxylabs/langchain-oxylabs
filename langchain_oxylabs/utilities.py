@@ -1,9 +1,12 @@
 """Chain that calls Oxylabs API for Google Search."""
 
 import asyncio
+import logging
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from platform import architecture, python_version
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from langchain_core.utils import get_from_dict_or_env
 from oxylabs import RealtimeClient  # type: ignore[import-untyped]
@@ -19,6 +22,10 @@ RESULT_CATEGORIES = [
     "search_information",
 ]
 
+# The `oxylabs` SDK catches every failed request, logs why on this logger, and
+# returns nothing. The log record is the only place the reason survives.
+SDK_LOGGER = "oxylabs.internal.api"
+
 IMAGE_BINARY_CONTENT_ARRAY_ATTRIBUTE = "images"
 BINARY_CONTENT_REPLACEMENT = "Redacted base64 image string..."
 
@@ -30,6 +37,64 @@ class ResponseElement:
     path_: str
     python_type: str
     parent: Optional["ResponseElement"]
+
+
+class OxylabsAPIError(RuntimeError):
+    """An Oxylabs Web Scraper API request failed. The message says why."""
+
+
+def _describe_sdk_error(messages: List[str]) -> str:
+    text = " ".join(messages)
+    if "401" in text:
+        return (
+            "Authentication failed (401). Check OXYLABS_USERNAME and"
+            " OXYLABS_PASSWORD: they must belong to a Web Scraper API user, and a"
+            " stray space or newline from copying is a common cause."
+        )
+    if "403" in text:
+        return (
+            "Access denied (403). The Web Scraper API user may lack access to this"
+            f" source, or the plan may have expired. Oxylabs said: {text}"
+        )
+    if "429" in text:
+        return (
+            "Rate limited (429). Lower concurrency, or check the plan's remaining"
+            " quota in the Oxylabs dashboard."
+        )
+    if "Timeout" in text or "timed out" in text:
+        return (
+            "The Oxylabs Web Scraper API request timed out. Raise `request_timeout`"
+            " or retry."
+        )
+    return f"The Oxylabs Web Scraper API request failed: {text}"
+
+
+@contextmanager
+def raise_sdk_errors() -> Iterator[None]:
+    """Turn a request the `oxylabs` SDK failed silently into an OxylabsAPIError.
+
+    Wrap a single SDK call. If the SDK logged an error for a request made on
+    this thread, raise it, phrased so the user knows what to fix. Records from
+    other threads are ignored, so concurrent calls can't see each other's
+    errors.
+    """
+    thread_id = threading.get_ident()
+    messages: List[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if record.thread == thread_id and record.levelno >= logging.ERROR:
+                messages.append(record.getMessage())
+
+    handler = _Collect()
+    logger = logging.getLogger(SDK_LOGGER)
+    logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
+    if messages:
+        raise OxylabsAPIError(_describe_sdk_error(messages))
 
 
 def get_sdk_type() -> str:
@@ -266,8 +331,7 @@ class OxylabsSearchAPIWrapper(BaseModel):
         Run query through Oxylabs Web Scrapper API and return SERPResponse object.
         """
         params_ = self.get_params(**kwargs)
-        search_client = self.search_engine
-        search_result = search_client.scrape_search(query, **params_)
+        search_result = self._scrape_search(query, params_)
 
         try:
             validated_responses = self._validate_response(search_result)
@@ -283,12 +347,7 @@ class OxylabsSearchAPIWrapper(BaseModel):
         """
         params_ = self.get_params(**kwargs)
 
-        search_client = self.search_engine
-        search_result = await asyncio.to_thread(
-            search_client.scrape_search,
-            query,
-            **params_,
-        )
+        search_result = await asyncio.to_thread(self._scrape_search, query, params_)
 
         try:
             validated_responses = self._validate_response(search_result)
@@ -297,6 +356,11 @@ class OxylabsSearchAPIWrapper(BaseModel):
             return []
 
         return validated_responses
+
+    def _scrape_search(self, query: str, params: Dict[str, Any]) -> Any:
+        """Call the SDK, raising OxylabsAPIError if the request itself failed."""
+        with raise_sdk_errors():
+            return self.search_engine.scrape_search(query, **params)
 
     def get_params(self, **kwargs: Any) -> Dict[str, Any]:
         """
