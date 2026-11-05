@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, Optional
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 
-from langchain_oxylabs.utilities import get_sdk_type
+from langchain_oxylabs.utilities import get_sdk_type, raise_sdk_errors
 from langchain_oxylabs.web_api import (
     Device,
     OxylabsWebAPIWrapper,
@@ -164,7 +164,8 @@ class OxylabsLoader(BaseLoader):
             raise ValueError("Either `urls` or `queries` must be provided.")
 
         for params in params_list:
-            response = self._oxylabs_api.get_response(params, self._config)
+            with raise_sdk_errors():
+                response = self._oxylabs_api.get_response(params, self._config)
 
             content = self._get_content_from_response(response)
             metadata = self._get_metadata_from_response(response)

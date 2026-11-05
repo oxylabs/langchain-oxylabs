@@ -10,7 +10,7 @@ from langchain_core.callbacks import (
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, ConfigDict, Field
 
-from langchain_oxylabs.utilities import OxylabsSearchAPIWrapper
+from langchain_oxylabs.utilities import OxylabsAPIError, OxylabsSearchAPIWrapper
 from langchain_oxylabs.web_api import (
     Device,
     OxylabsWebAPIError,
@@ -144,6 +144,7 @@ class OxylabsSearchRun(BaseTool):
     wrapper: OxylabsSearchAPIWrapper
     kwargs: dict = Field(default_factory=dict)
     args_schema: Type[BaseModel] = OxylabsSearchQueryInput
+    handle_tool_error: bool = True
 
     def _run(
         self,
@@ -158,7 +159,10 @@ class OxylabsSearchRun(BaseTool):
         if geo_location:
             kwargs_["geo_location"] = geo_location
 
-        return self.wrapper.run(query, **kwargs_)
+        try:
+            return self.wrapper.run(query, **kwargs_)
+        except OxylabsAPIError as exc:
+            raise ToolException(str(exc)) from exc
 
     async def _arun(
         self,
@@ -173,7 +177,10 @@ class OxylabsSearchRun(BaseTool):
         if geo_location:
             kwargs_["geo_location"] = geo_location
 
-        return await self.wrapper.arun(query, **kwargs_)
+        try:
+            return await self.wrapper.arun(query, **kwargs_)
+        except OxylabsAPIError as exc:
+            raise ToolException(str(exc)) from exc
 
 
 class OxylabsSearchResults(BaseTool):
@@ -285,6 +292,7 @@ class OxylabsSearchResults(BaseTool):
     wrapper: OxylabsSearchAPIWrapper
     kwargs: dict = Field(default_factory=dict)
     args_schema: Type[BaseModel] = OxylabsSearchQueryInput
+    handle_tool_error: bool = True
 
     model_config = ConfigDict(
         extra="allow",
@@ -303,7 +311,10 @@ class OxylabsSearchResults(BaseTool):
         if geo_location:
             kwargs_["geo_location"] = geo_location
 
-        return json.dumps(self.wrapper.results(query, **kwargs_))
+        try:
+            return json.dumps(self.wrapper.results(query, **kwargs_))
+        except OxylabsAPIError as exc:
+            raise ToolException(str(exc)) from exc
 
     async def _arun(
         self,
@@ -318,7 +329,10 @@ class OxylabsSearchResults(BaseTool):
         if geo_location:
             kwargs_["geo_location"] = geo_location
 
-        return json.dumps(await self.wrapper.aresults(query, **kwargs_))
+        try:
+            return json.dumps(await self.wrapper.aresults(query, **kwargs_))
+        except OxylabsAPIError as exc:
+            raise ToolException(str(exc)) from exc
 
 
 # Below this many characters, a page fetched without JavaScript is likely an empty

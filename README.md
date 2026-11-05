@@ -381,9 +381,15 @@ environment out.
 **`NotImplementedError: Source ... is not supported`** — the search tools only
 support `google_search`. Use `OxylabsLoader` for other Oxylabs sources.
 
-**Empty results / `"No good search result found"`** — the API occasionally
-returns a response the wrapper cannot parse, and this is currently reported as an
-empty result rather than an error. Retrying usually succeeds.
+**`OxylabsAPIError: Authentication failed (401)`** — `OXYLABS_USERNAME` and
+`OXYLABS_PASSWORD` don't belong to a Web Scraper API user, or one of them has a
+stray space or newline. The search tools return this message to the agent
+instead of raising it.
+
+**Empty results / `"No good search result found"`** — the request succeeded but
+the response had nothing the wrapper could parse. Retrying usually succeeds. A
+failed request (bad credentials, rate limit, timeout) raises `OxylabsAPIError`
+instead.
 
 **Slow calls** — scraping is inherently slower than a normal HTTP request; single
 calls can take tens of seconds. `request_timeout` (default 165s) is configurable.

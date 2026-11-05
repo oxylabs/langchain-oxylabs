@@ -6,13 +6,14 @@ from langchain_oxylabs.tools import (
     OxylabsWebScrape,
     OxylabsWebSearch,
 )
-from langchain_oxylabs.utilities import OxylabsSearchAPIWrapper
+from langchain_oxylabs.utilities import OxylabsAPIError, OxylabsSearchAPIWrapper
 from langchain_oxylabs.web_api import OxylabsWebAPIError, OxylabsWebAPIWrapper
 
 __all__ = [
     "OxylabsSearchRun",
     "OxylabsSearchResults",
     "OxylabsSearchAPIWrapper",
+    "OxylabsAPIError",
     "OxylabsLoader",
     "OxylabsWebSearch",
     "OxylabsWebScrape",
