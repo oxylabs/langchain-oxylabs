@@ -1,7 +1,8 @@
 # langchain-oxylabs
 
-LangChain integration for the [Oxylabs Web Scraper API](https://oxylabs.io/products/scraper-api).
-Gives LangChain agents live web search, and bulk-scrapes pages into LangChain
+LangChain integration for the Oxylabs **Web API** and the Oxylabs
+[**Web Scraper API**](https://oxylabs.io/products/scraper-api). Gives LangChain
+agents live web search and page reading, and bulk-scrapes pages into LangChain
 `Document` objects for retrieval-augmented generation.
 
 [![PyPI version](https://img.shields.io/pypi/v/langchain-oxylabs?style=flat-square)](https://pypi.org/project/langchain-oxylabs/)
@@ -32,7 +33,153 @@ web on its own. This package closes that gap in two ways:
 pip install -U langchain-oxylabs
 ```
 
-## Credentials
+## Which Oxylabs product
+
+The package covers two Oxylabs products. They use different credentials, so use
+the classes for the product you have.
+
+| Product | Credentials | Classes |
+| :--- | :--- | :--- |
+| **Web API** | One API key: `OXYLABS_WEB_API_KEY` | `OxylabsWebSearch`, `OxylabsWebScrape`, `OxylabsWebLoader`, `OxylabsWebAPIWrapper` |
+| **Web Scraper API** | Username and password: `OXYLABS_USERNAME`, `OXYLABS_PASSWORD` | `OxylabsSearchRun`, `OxylabsSearchResults`, `OxylabsLoader`, `OxylabsSearchAPIWrapper` |
+
+## Web API
+
+### Credentials
+
+Create a Web API instance in the
+[Oxylabs dashboard](https://dashboard.oxylabs.io/) and copy its API key. Keys
+from other Oxylabs products don't work with the Web API.
+
+```bash
+export OXYLABS_WEB_API_KEY="your-web-api-key"
+```
+
+The key can also be passed directly:
+
+```python
+from langchain_oxylabs import OxylabsWebAPIWrapper, OxylabsWebSearch
+
+tool = OxylabsWebSearch(
+    wrapper=OxylabsWebAPIWrapper(oxylabs_web_api_key="your-web-api-key")
+)
+```
+
+### What to use when
+
+| Class | Returns | Use it for |
+| :--- | :--- | :--- |
+| `OxylabsWebSearch` | JSON string: titles, URLs, snippets | Letting an agent search the live web. |
+| `OxylabsWebScrape` | Page as Markdown (or HTML), or JSON fields | Letting an agent read a URL, including JavaScript-heavy and bot-protected pages. |
+| `OxylabsWebLoader` | `Document` objects | Loading a list of URLs for RAG indexing. |
+| `OxylabsWebAPIWrapper` | Raw API responses | Calling the API from your own code, or configuring timeouts and retries. |
+
+### Search and scrape tools
+
+```python
+from langchain_oxylabs import OxylabsWebScrape, OxylabsWebSearch
+
+search = OxylabsWebSearch()
+print(search.invoke({"query": "best hiking boots", "max_results": 5, "location": "DE"}))
+# {"results": [{"title": "...", "url": "https://...", "outline": ["..."]}, ...],
+#  "related_questions": ["..."]}
+
+scrape = OxylabsWebScrape()
+print(scrape.invoke({"url": "https://sandbox.oxylabs.io/products/1"}))
+```
+
+`location` is a two-letter country code (`DE`, `US`, `LT`). Search results are
+ranked as someone in that country would see them, and pages are fetched from
+there.
+
+Scrape options:
+
+| Argument | Default | Purpose |
+| :--- | :--- | :--- |
+| `output` | `markdown` | `markdown` or `html` |
+| `location` | unset | Country to fetch the page from |
+| `device` | desktop | `desktop` or `mobile` |
+| `run_js` | `False` | Render the page's JavaScript. Slower; use it when a page comes back nearly empty. |
+| `json_prompt` | unset | Fields to extract, in plain words. Returns them as JSON instead of the page. |
+
+```python
+scrape.invoke(
+    {
+        "url": "https://sandbox.oxylabs.io/products/1",
+        "json_prompt": "the game title, price and platforms",
+    }
+)
+# '{"game_title": "The Legend of Zelda: Ocarina of Time", "price": "91,99 €", ...}'
+```
+
+Pages longer than 50,000 characters are truncated so one page doesn't fill the
+model's context. Change it with `OxylabsWebScrape(max_content_chars=...)`, or
+pass `None` to turn it off.
+
+API errors (a bad key, a spent quota, an invalid argument) are returned to the
+agent as the tool's output rather than raised, so the agent can correct itself.
+Calling `OxylabsWebAPIWrapper` directly raises `OxylabsWebAPIError` instead.
+
+Both tools support `ainvoke` for async use.
+
+### Using with an agent
+
+```python
+from langchain.agents import create_agent
+from langchain_oxylabs import OxylabsWebScrape, OxylabsWebSearch
+
+agent = create_agent(
+    model="anthropic:claude-sonnet-5",
+    tools=[OxylabsWebSearch(), OxylabsWebScrape()],
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "What do hiking boots cost in Germany?"}]}
+)
+print(result["messages"][-1].content)
+```
+
+The model searches, then reads the pages worth reading, and picks `location`
+from the question.
+
+### Document loader
+
+```python
+from langchain_oxylabs import OxylabsWebLoader
+
+loader = OxylabsWebLoader(
+    urls=[
+        "https://sandbox.oxylabs.io/products/1",
+        "https://sandbox.oxylabs.io/products/2",
+    ],
+    location="DE",
+)
+
+for document in loader.lazy_load():
+    print(document.metadata)  # source, final_url, status_code, request_id
+    print(document.page_content[:250])
+```
+
+`OxylabsWebLoader` takes the same `output`, `location`, `device` and `run_js`
+options as the scrape tool. `aload()` and `alazy_load()` are available for async
+code.
+
+### Configuring the wrapper
+
+| Option | Default | Purpose |
+| :--- | :--- | :--- |
+| `request_timeout` | `200` | Seconds to wait for one HTTP response |
+| `max_retries` | `2` | Extra attempts after a 429, 5xx or connection error |
+| `max_wait` | `600` | Seconds to wait for a slow scrape |
+| `poll_interval` | `5` | Seconds between checks on a slow scrape |
+
+A scrape that takes longer than the API's synchronous limit (often with
+`run_js`) is queued automatically and checked every `poll_interval` seconds until
+it finishes or `max_wait` runs out.
+
+## Web Scraper API
+
+### Credentials
 
 Sign up for a free trial or purchase the product in the
 [Oxylabs dashboard](https://dashboard.oxylabs.io/en/registration) to create your
@@ -52,7 +199,7 @@ OxylabsSearchAPIWrapper(
 )
 ```
 
-## What to use when
+### What to use when
 
 | Class | Returns | Use it for |
 | :--- | :--- | :--- |
@@ -61,7 +208,7 @@ OxylabsSearchAPIWrapper(
 | `OxylabsLoader` | `Document` objects | Bulk scraping for RAG indexing. |
 | `OxylabsSearchAPIWrapper` | — | Shared client and configuration for both search tools. |
 
-## Search tools
+### Search tools
 
 ```python
 import json
@@ -89,7 +236,7 @@ Both tools also support `ainvoke` for async use.
 > **Note:** the search tools query Google (`google_search`). Other Oxylabs
 > sources such as `amazon_search` are available through `OxylabsLoader`.
 
-### Geo-targeted results
+#### Geo-targeted results
 
 `geo_location` scopes results to a location — the main reason to use Oxylabs for
 search data. Supply it per call, or configure a default on the wrapper:
@@ -107,7 +254,7 @@ oxylabs_wrapper = OxylabsSearchAPIWrapper(
 A per-call value takes precedence over the wrapper default. If neither is set,
 Oxylabs applies its own default.
 
-### Configuring the wrapper
+#### Configuring the wrapper
 
 `OxylabsSearchAPIWrapper(params={...})` accepts
 [Oxylabs Web Scraper API parameters](https://developers.oxylabs.io/scraper-apis/web-scraper-api/targets/generic-target#additional).
@@ -141,7 +288,7 @@ wrapper = OxylabsSearchAPIWrapper(
 )
 ```
 
-## Using with an agent
+### Using with an agent
 
 ```python
 from langchain.agents import create_agent
@@ -159,7 +306,7 @@ print(result["messages"][-1].content)
 The model chooses when to search and which `geo_location` to use, based on the
 question it is answering.
 
-## Document loader
+### Document loader
 
 `OxylabsLoader` scrapes into LangChain
 [`Document`](https://python.langchain.com/docs/concepts/documents/) objects for
@@ -206,6 +353,26 @@ arrive; prefer it to `load()` for large batches.
 
 ## Troubleshooting
 
+### Web API
+
+**`Oxylabs Web API key is missing`** — `OXYLABS_WEB_API_KEY` is unset. Set it,
+or pass `oxylabs_web_api_key` to `OxylabsWebAPIWrapper`.
+
+**`Authentication failed (401)`** — the key is wrong, or it belongs to another
+Oxylabs product. Copy the key of a Web API instance from the dashboard.
+
+**`String should match pattern '^[A-Za-z]{2}$'`** — `location` must be a
+two-letter country code such as `DE`, not a place name.
+
+**A page comes back nearly empty** — it renders client-side. Call the scrape
+again with `run_js=True`.
+
+**`... with state "faulted"`** — the API could not fetch the page after its own
+retries. Faulted requests are not charged. If it keeps happening, quote the
+`request_id` from the message to Oxylabs support.
+
+### Web Scraper API
+
 **`RuntimeError: Please set up environment variables`** — `OXYLABS_USERNAME` and
 `OXYLABS_PASSWORD` are unset, or contain a stray newline or space from being
 copied. Pass them explicitly to `OxylabsSearchAPIWrapper` to rule the
@@ -228,7 +395,7 @@ poetry install --with test,lint,typing
 
 make test               # unit tests, no network access
 make lint               # ruff + mypy
-make integration_tests  # live API calls, requires credentials
+make integration_tests  # live API calls, requires credentials for both products
 ```
 
 ## Links

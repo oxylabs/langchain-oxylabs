@@ -1,16 +1,23 @@
-"""Tool for the Oxylabs Search API."""
+"""Tools for the Oxylabs Search API and the Oxylabs Web API."""
 
 import json
-from typing import Optional, Type
+from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, ConfigDict, Field
 
 from langchain_oxylabs.utilities import OxylabsSearchAPIWrapper
+from langchain_oxylabs.web_api import (
+    Device,
+    OxylabsWebAPIError,
+    OxylabsWebAPIWrapper,
+    ScrapeFormat,
+    scrape_results,
+)
 
 
 class OxylabsSearchQueryInput(BaseModel):
@@ -312,3 +319,299 @@ class OxylabsSearchResults(BaseTool):
             kwargs_["geo_location"] = geo_location
 
         return json.dumps(await self.wrapper.aresults(query, **kwargs_))
+
+
+# Below this many characters, a page fetched without JavaScript is likely an empty
+# shell that renders client-side.
+THIN_CONTENT_CHARS = 500
+
+
+class OxylabsWebSearchInput(BaseModel):
+    """Input for the OxylabsWebSearch tool."""
+
+    query: str = Field(
+        description="What to search for, as a natural search phrase. Keyword-shaped"
+        " queries beat sentence-shaped ones. One question per search.",
+        min_length=1,
+        max_length=2048,
+    )
+    max_results: int = Field(
+        default=10,
+        description="Maximum number of results to return. The response may contain"
+        " fewer.",
+        ge=1,
+        le=20,
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="ISO 3166-1 alpha-2 country code to rank results for, e.g. `DE`,"
+        " `US`, `LT`. Pass it whenever the answer is geographic. A place name such"
+        " as `Germany` is rejected.",
+        pattern="^[A-Za-z]{2}$",
+    )
+
+
+class OxylabsWebSearch(BaseTool):
+    """Oxylabs Web API search tool.
+
+    Setup:
+        Install ``langchain-oxylabs`` and set ``OXYLABS_WEB_API_KEY`` to the key of
+        a Web API instance from the Oxylabs dashboard.
+
+        .. code-block:: bash
+
+            pip install -U langchain-oxylabs
+            export OXYLABS_WEB_API_KEY="your-web-api-key"
+
+    Instantiation:
+        .. code-block:: python
+
+            from langchain_oxylabs import OxylabsWebSearch
+
+            tool = OxylabsWebSearch()
+
+    Invocation with args:
+        .. code-block:: python
+
+            tool.invoke({"query": "best hiking boots", "location": "DE"})
+
+        .. code-block:: python
+
+            '{"results": [{"title": "...", "url": "https://...", "outline": ["..."]},'
+            ' ...], "related_questions": ["..."]}'
+
+    Invocation with ToolCall:
+        .. code-block:: python
+
+            tool.invoke(
+                {
+                    "args": {"query": "best hiking boots", "location": "DE"},
+                    "id": "1",
+                    "name": "oxylabs_web_search",
+                    "type": "tool_call",
+                }
+            )
+    """
+
+    name: str = "oxylabs_web_search"
+    description: str = (
+        "Search the live web and return ranked organic results. Use for anything"
+        " where being out of date makes the answer wrong: current events, news,"
+        " prices, availability, versions, rankings, or any fact past your knowledge"
+        " cutoff. Results are ranked as someone in the `location` country would see"
+        " them. Returns titles, URLs and short snippets (`outline`), not page"
+        " content: read the pages worth reading with `oxylabs_web_scrape`."
+    )
+    wrapper: OxylabsWebAPIWrapper = Field(default_factory=OxylabsWebAPIWrapper)
+    args_schema: Type[BaseModel] = OxylabsWebSearchInput
+    handle_tool_error: bool = True
+    handle_validation_error: bool = True
+
+    @staticmethod
+    def _format(response: Dict[str, Any]) -> str:
+        results = [
+            {key: item[key] for key in ("title", "url", "outline") if key in item}
+            for item in response.get("results") or []
+            if isinstance(item, dict)
+        ]
+        questions = [
+            item["question"]
+            for item in response.get("related_questions") or []
+            if isinstance(item, dict) and item.get("question")
+        ]
+        out: Dict[str, Any] = {"results": results}
+        if questions:
+            out["related_questions"] = questions
+        return json.dumps(out, ensure_ascii=False)
+
+    def _run(
+        self,
+        query: str,
+        max_results: int = 10,
+        location: Optional[str] = None,
+        # run_manager is added to enable tracing
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool."""
+        try:
+            return self._format(self.wrapper.search(query, max_results, location))
+        except OxylabsWebAPIError as exc:
+            raise ToolException(str(exc)) from exc
+
+    async def _arun(
+        self,
+        query: str,
+        max_results: int = 10,
+        location: Optional[str] = None,
+        # run_manager is added to enable tracing
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool asynchronously."""
+        try:
+            response = await self.wrapper.asearch(query, max_results, location)
+        except OxylabsWebAPIError as exc:
+            raise ToolException(str(exc)) from exc
+        return self._format(response)
+
+
+class OxylabsWebScrapeInput(BaseModel):
+    """Input for the OxylabsWebScrape tool."""
+
+    url: str = Field(description="Absolute http(s) URL of the page to read.")
+    output: ScrapeFormat = Field(
+        default="markdown",
+        description="`markdown` to read the page: far fewer tokens, structure intact."
+        " `html` only when you need the markup itself. Ignored when `json_prompt` is"
+        " set.",
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="Two-letter country code to fetch the page from. Use it when the"
+        " page varies by country: pricing, availability, language.",
+        pattern="^[A-Za-z]{2}$",
+    )
+    device: Optional[Device] = Field(
+        default=None,
+        description="Viewport to fetch as. The API's default is desktop.",
+    )
+    run_js: bool = Field(
+        default=False,
+        description="Execute the page's JavaScript. Needed for pages that render"
+        " client-side and come back empty otherwise. Slower: try without it first.",
+    )
+    json_prompt: Optional[str] = Field(
+        default=None,
+        description="Fields to pull out as JSON, in plain words: name them and say"
+        " what shape you want, e.g. `the product title, price and a list of image"
+        " links`. Leave unset to read the page yourself.",
+    )
+
+
+class OxylabsWebScrape(BaseTool):
+    """Oxylabs Web API scrape tool.
+
+    Setup:
+        Install ``langchain-oxylabs`` and set ``OXYLABS_WEB_API_KEY`` to the key of
+        a Web API instance from the Oxylabs dashboard.
+
+        .. code-block:: bash
+
+            pip install -U langchain-oxylabs
+            export OXYLABS_WEB_API_KEY="your-web-api-key"
+
+    Instantiation:
+        .. code-block:: python
+
+            from langchain_oxylabs import OxylabsWebScrape
+
+            tool = OxylabsWebScrape()
+
+    Invocation with args:
+        .. code-block:: python
+
+            tool.invoke({"url": "https://sandbox.oxylabs.io/products/1"})
+
+        .. code-block:: python
+
+            tool.invoke(
+                {
+                    "url": "https://sandbox.oxylabs.io/products/1",
+                    "json_prompt": "the game title, price and platforms",
+                }
+            )
+
+    Invocation with ToolCall:
+        .. code-block:: python
+
+            tool.invoke(
+                {
+                    "args": {"url": "https://sandbox.oxylabs.io/products/1"},
+                    "id": "1",
+                    "name": "oxylabs_web_scrape",
+                    "type": "tool_call",
+                }
+            )
+    """
+
+    name: str = "oxylabs_web_scrape"
+    description: str = (
+        "Fetch and read a single URL, including JavaScript-heavy and bot-protected"
+        " pages that an ordinary fetch can't open. Returns the page as Markdown by"
+        " default. If the page comes back nearly empty, call again with"
+        " `run_js` set to true. Set `json_prompt` to get named fields as JSON"
+        " instead of the whole page."
+    )
+    wrapper: OxylabsWebAPIWrapper = Field(default_factory=OxylabsWebAPIWrapper)
+    args_schema: Type[BaseModel] = OxylabsWebScrapeInput
+    handle_tool_error: bool = True
+    handle_validation_error: bool = True
+    max_content_chars: Optional[int] = Field(
+        default=50_000,
+        description="Truncate page content to this many characters, so one large"
+        " page doesn't fill the model's context. None disables truncation.",
+    )
+
+    def _format(self, response: Dict[str, Any], output: str, run_js: bool) -> str:
+        results = scrape_results(response)
+        if not results:
+            raise ToolException(f"The scrape returned no results: {response}")
+
+        if "json" in results[0]:
+            parsed = [r.get("json") for r in results]
+            return json.dumps(parsed[0] if len(parsed) == 1 else parsed)
+
+        text = "\n\n".join(str(r.get(output) or "") for r in results)
+        notes = []
+        limit = self.max_content_chars
+        if limit is not None and len(text) > limit:
+            notes.append(
+                f"[Truncated: showing {limit} of {len(text)} characters. Use"
+                " `json_prompt` to pull out only the fields you need.]"
+            )
+            text = text[:limit]
+        elif not run_js and len(text.strip()) < THIN_CONTENT_CHARS:
+            notes.append(
+                "[Very little content. If the page renders client-side, call again"
+                " with `run_js` set to true.]"
+            )
+        return "\n\n".join([text, *notes]) if notes else text
+
+    def _run(
+        self,
+        url: str,
+        output: ScrapeFormat = "markdown",
+        location: Optional[str] = None,
+        device: Optional[Device] = None,
+        run_js: bool = False,
+        json_prompt: Optional[str] = None,
+        # run_manager is added to enable tracing
+        run_manager: Optional[CallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool."""
+        try:
+            response = self.wrapper.scrape(
+                url, output, location, device, run_js, json_prompt
+            )
+        except OxylabsWebAPIError as exc:
+            raise ToolException(str(exc)) from exc
+        return self._format(response, output, run_js)
+
+    async def _arun(
+        self,
+        url: str,
+        output: ScrapeFormat = "markdown",
+        location: Optional[str] = None,
+        device: Optional[Device] = None,
+        run_js: bool = False,
+        json_prompt: Optional[str] = None,
+        # run_manager is added to enable tracing
+        run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
+    ) -> str:
+        """Use the tool asynchronously."""
+        try:
+            response = await self.wrapper.ascrape(
+                url, output, location, device, run_js, json_prompt
+            )
+        except OxylabsWebAPIError as exc:
+            raise ToolException(str(exc)) from exc
+        return self._format(response, output, run_js)
