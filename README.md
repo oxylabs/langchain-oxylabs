@@ -1,11 +1,11 @@
 # langchain-oxylabs
 
 LangChain integration for the Oxylabs **Web API** and the Oxylabs
-[**Web Scraper API**](https://oxylabs.io/products/scraper-api). Gives LangChain
+[**Web Scraper API**](https://oxylabs.io/products/scraper-api?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&groupid=877). Gives LangChain
 agents live web search and page reading, and bulk-scrapes pages into LangChain
 `Document` objects for retrieval-augmented generation.
 
-<a href="https://oxylabs.io"><img src="https://img.shields.io/badge/🚀_Get_Started-FF6B35?style=for-the-badge" alt="Get started"></a>
+<a href="https://oxylabs.io/?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&utm_campaign=banner&groupid=877"><img src="https://img.shields.io/badge/🚀_Get_Started-FF6B35?style=for-the-badge" alt="Get started"></a>
 <a href="https://developers.oxylabs.io"><img src="https://img.shields.io/badge/📚_Documentation-4A90E2?style=for-the-badge" alt="Documentation"></a>
 <a href="https://dashboard.oxylabs.io"><img src="https://img.shields.io/badge/📊_Dashboard-2EA44F?style=for-the-badge" alt="Dashboard"></a>
 <a href="https://discord.gg/Pds3gBmKMH"><img src="https://img.shields.io/badge/💬_Discord-5865F2?style=for-the-badge" alt="Discord"></a>
