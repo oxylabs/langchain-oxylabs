@@ -6,7 +6,7 @@ agents live web search and page reading, and bulk-scrapes pages into LangChain
 `Document` objects for retrieval-augmented generation.
 
 <a href="https://oxylabs.io/?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&utm_campaign=banner&groupid=877"><img src="https://img.shields.io/badge/🚀_Get_Started-FF6B35?style=for-the-badge" alt="Get started"></a>
-<a href="https://developers.oxylabs.io"><img src="https://img.shields.io/badge/📚_Documentation-4A90E2?style=for-the-badge" alt="Documentation"></a>
+<a href="https://developers.oxylabs.io/?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&utm_campaign=banner&groupid=877"><img src="https://img.shields.io/badge/📚_Documentation-4A90E2?style=for-the-badge" alt="Documentation"></a>
 <a href="https://dashboard.oxylabs.io"><img src="https://img.shields.io/badge/📊_Dashboard-2EA44F?style=for-the-badge" alt="Dashboard"></a>
 <a href="https://discord.gg/Pds3gBmKMH"><img src="https://img.shields.io/badge/💬_Discord-5865F2?style=for-the-badge" alt="Discord"></a>
 <a href="https://www.youtube.com/@oxylabs"><img src="https://img.shields.io/badge/▶️_YouTube-FF0000?style=for-the-badge" alt="YouTube"></a>
@@ -261,7 +261,7 @@ Oxylabs applies its own default.
 #### Configuring the wrapper
 
 `OxylabsSearchAPIWrapper(params={...})` accepts
-[Oxylabs Web Scraper API parameters](https://developers.oxylabs.io/scraper-apis/web-scraper-api/targets/generic-target#additional).
+[Oxylabs Web Scraper API parameters](https://developers.oxylabs.io/scraper-apis/web-scraper-api/targets/generic-target?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&groupid=877#additional).
 Frequently useful ones:
 
 | Parameter | Default | Purpose |
@@ -410,7 +410,7 @@ make integration_tests  # live API calls, requires credentials for both products
 
 ## Links
 
-- [Oxylabs Web Scraper API documentation](https://developers.oxylabs.io/scraper-apis/web-scraper-api)
+- [Oxylabs Web Scraper API documentation](https://developers.oxylabs.io/scraper-apis/web-scraper-api?utm_source=github&utm_medium=referral&utm_content=langchain-oxylabs&groupid=877)
 - [Release notes](https://github.com/oxylabs/langchain-oxylabs/releases)
 - [LangChain tools concept guide](https://docs.langchain.com/oss/python/langchain/tools)
 - [LangChain agents guide](https://docs.langchain.com/oss/python/langchain/agents)
